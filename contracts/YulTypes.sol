@@ -248,4 +248,136 @@ contract Memory {
         mstore8 = como mstore pero para 1 byte
         msize = mayor indice de memoria accedido en esa transaccion
     */
+
+   event Debug(bytes32, bytes32, bytes32, bytes32);
+   
+   function args(uint256[] memory arr) external {
+    
+    bytes32 location;
+    bytes32 len;
+    bytes32 valueIndex0;
+    bytes32 valueIndex1;
+
+    assembly {
+        location := arr
+        len := mload(arr)
+        valueIndex0 := mload(add(arr, 0x20))
+        valueIndex1 := mload(add(arr, 0x40))
+    }
+    emit Debug(location, len, valueIndex0, valueIndex1);
+   }
+
+       function return2anf4() external pure returns (uint256, uint256) {
+        assembly {
+            mstore(0x00, 2)
+            mstore(0x20, 4)
+            return(0x00, 0x40)
+        }
+    }
+}
+
+contract CallData {
+    /*
+        Al enviar a un contrato inteligente, los primeros cuatro bytes especifican qué función está
+        llamando y los bytes que siguen son argumentos de función codificados en abi.
+
+        https://docs.soliditylang.org/en/develop/abi-spec.html#abi
+        Solidity espera que los bytes después del selector de función siempre tengan una longitud múltiplo
+        de 32, pero esto es una convención.
+        Si envía más bytes, solidity los ignorará.
+        Pero un contrato inteligente yul se puede programar para responder a tx.data de
+        longitud arbitraria de manera arbitraria
+
+        
+        Los selectores de funciones son los primeros cuatro bytes del keccak256 de la firma de la
+        función.
+        balanceOf(address _address) --> keccak256 ("balanceOf(address)") --> 0x70a08231
+    
+        balanceOf(0x5B38Da6a701c568545dCfcB03FcB875f56beddC4) 
+        0x70a0823100000000000000000000000005B38Da6a701c568545dCfcB03FcB875f56beddC4
+
+        con dos params se veria asi
+        
+        balanceOf(address _address, uint256 id) 
+        keccak256 ("balanceOf(address, uint256)") --> 0x00fdd58e
+        balanceOf(0x5B38Da6a701c568545dCfcB03FcB875f56beddC4, 5) -->
+        0x00fdd58e00000000000000000000000005B38Da6a701c568545dCfcB03FcB875f56beddC40-00000000000000000000000000000005
+
+
+    */
+}
+
+contract OtherContract {
+    uint256 public x;
+    uint256[] public arr;
+
+    function get21() external pure returns (uint256) {
+        return 21;
+    }
+
+    function revert99() external pure returns (uint256) {
+        assembly {
+            mstore(0x00, 99)
+            revert(0x00, 0x20)
+        }
+    }
+
+}
+
+contract ExternalCalls {
+    // staticcall no genera cambios
+    // desplegar other contract -> copiar direccion y pegarla en parametro de esta funcion = 21
+    function externalViewCallNoArgs(address _a) external view returns (uint256) {
+        assembly {
+
+            mstore(0x00, 0x9a884bde)
+            // 00000000000000000000000000000000000000000000000000000000 9a884bde
+            //                                                         28       32
+            let success := staticcall(gas(), _a, 28, 32, 0x00, 0x20)
+            // gas() cuanto gas desea pasarle a la otra funcion 
+            // _a la direccion del contrato que pegamos
+            // 28, 32 datos de transaccion cargados en memoria
+            // 0x00, 0x20 region de memoria donde vamos a copiar los resultados
+
+            if iszero(success) {
+                revert(0, 0)
+            }
+            return (0x00, 0x20)
+        }
+    }
+
+    function revertWithInfo(address _a) external view returns (uint256) {
+        assembly {
+            mstore(0x00, 0x73712595)
+            pop(staticcall(gas(), _a, 28, 32, 0x00 ,0x20))
+            return (0x00, 0x20)
+        }
+    }
+}
+
+contract Withdraw1 {
+    constructor() payable {}
+
+    address public constant owner = 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4;
+    function withdraw () external {
+        (bool s, ) = payable(owner).call{value: address(this).balance}("");
+        require(s);
+    }
+}
+
+contract Withdraw2 {
+    /*
+    esta es una manera mucho mas eficiente de ahorrar gas a la hora de desplegar
+    */
+    constructor() payable {}
+
+    address public constant owner = 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4;
+    function withdraw () external {
+        assembly {
+            let s := call(gas(), owner, selfbalance(), 0, 0, 0, 0)
+            if iszero(s) {
+                revert(0, 0)
+            }
+        }
+    }
 }
